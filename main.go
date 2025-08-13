@@ -2,19 +2,49 @@ package savefile
 
 import (
 	"encoding/gob"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"time"
 )
 
+type EncoderDecoder interface {
+	Encode(w io.Writer, v any) error
+	Decode(r io.Reader, v any) error
+}
+
+type GobCodec struct{}
+
+func (g GobCodec) Encode(w io.Writer, v any) error { return gob.NewEncoder(w).Encode(v) }
+func (g GobCodec) Decode(r io.Reader, v any) error { return gob.NewDecoder(r).Decode(v) }
+
+type JSONCodec struct{}
+
+func (j JSONCodec) Encode(w io.Writer, v any) error { return json.NewEncoder(w).Encode(v) }
+func (j JSONCodec) Decode(r io.Reader, v any) error { return json.NewDecoder(r).Decode(v) }
+
 type Saver struct {
 	dir            string
 	maxStoredFiles int
+	codec          EncoderDecoder
+}
+
+func (s *Saver) fileExt() string {
+	switch s.codec.(type) {
+	case JSONCodec:
+		return ".json"
+	case GobCodec:
+		return ".bin"
+	default:
+		return ".dat"
+	}
 }
 
 // New creates (or reuses) a save directory at path.
-func New(path string) (*Saver, error) {
+func New(path string, codec EncoderDecoder) (*Saver, error) {
 	absPath, err := filepath.Abs(path)
 	if err != nil {
 		return nil, err
@@ -22,10 +52,10 @@ func New(path string) (*Saver, error) {
 	if err := os.MkdirAll(absPath, 0755); err != nil {
 		return nil, err
 	}
-	return &Saver{dir: absPath}, nil
+	return &Saver{dir: absPath, codec: codec}, nil
 }
 
-func NewLimit(path string, maxFiles int) (*Saver, error) {
+func NewLimit(path string, codec EncoderDecoder, maxFiles int) (*Saver, error) {
 	absPath, err := filepath.Abs(path)
 	if err != nil {
 		return nil, err
@@ -33,7 +63,7 @@ func NewLimit(path string, maxFiles int) (*Saver, error) {
 	if err := os.MkdirAll(absPath, 0755); err != nil {
 		return nil, err
 	}
-	return &Saver{dir: absPath, maxStoredFiles: maxFiles}, nil
+	return &Saver{dir: absPath, maxStoredFiles: maxFiles, codec: codec}, nil
 }
 
 // Save writes data to a new file with a timestamp in its name.
@@ -42,9 +72,10 @@ func (s *Saver) Save(data any) error {
 	if err != nil {
 		return err
 	}
+	oldestTime := time.Now()
+	var oldestFile string
+	saveFilesCount := 0
 	if s.maxStoredFiles != 0 {
-		latestTime := time.Now()
-		var latestFile string
 		for _, f := range files {
 			if !f.Type().IsRegular() {
 				continue
@@ -57,28 +88,38 @@ func (s *Saver) Save(data any) error {
 			if err != nil {
 				continue // skip files that don't match
 			}
-			if t.Before(latestTime) {
-				latestTime = t
-				latestFile = f.Name()
+			saveFilesCount++
+			if saveFilesCount == 1 || t.Before(oldestTime) {
+				oldestTime = t
+				oldestFile = f.Name()
 			}
 		}
-		if len(files) >= s.maxStoredFiles {
-			err = os.Remove(latestFile)
-			if err != nil {
-				return err
+		if saveFilesCount >= s.maxStoredFiles {
+			if oldestFile != "" {
+				fmt.Printf("removing %s", oldestFile)
+				err = os.Remove(filepath.Join(s.dir, oldestFile))
+				if err != nil {
+					return err
+				}
 			}
 		}
 	}
-	filename := "save_" + time.Now().Format("20060102_150405") + ".bin"
+	filename := "save_" + time.Now().Format("20060102_150405") + s.fileExt()
 	path := filepath.Join(s.dir, filename)
 
 	file, err := os.Create(path)
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	return s.codec.Encode(file, data)
+}
 
-	return gob.NewEncoder(file).Encode(data)
+func (s *Saver) Load(file string, target any) error {
+	f, err := os.Open(filepath.Join(s.dir, file))
+	if err != nil {
+		return err
+	}
+	return s.codec.Decode(f, target)
 }
 
 // LoadLatest reads and decodes the most recent save file.
@@ -118,7 +159,5 @@ func (s *Saver) LoadLatest(target any) error {
 	if err != nil {
 		return err
 	}
-	defer file.Close()
-
-	return gob.NewDecoder(file).Decode(target)
+	return s.codec.Decode(file, target)
 }
