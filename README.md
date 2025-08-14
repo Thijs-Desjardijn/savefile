@@ -30,7 +30,8 @@ PREFIX_YYYYMMDD_HHMMSS.ext
 ## Functions and Methods
 
 ### `New(path string, codec EncoderDecoder) (*Saver, error)`
-Creates a new `Saver` instance that manages save files in a given directory and handles encoding/decoding using the provided codec.
+Creates a new `Saver` instance that manages save files in a given directory and handles encoding/decoding using the provided codec.                               
+**Note that you are allowed to create multiple savers in 1 directory but this will cause unexpected behavior**.
 
 **Parameters:**
 - `path` — The filesystem path to the directory where save files will be stored.
@@ -40,8 +41,8 @@ Creates a new `Saver` instance that manages save files in a given directory and 
   - `JSONCodec{}` for [json](https://pkg.go.dev/encoding/json) text encoding.
 
 **Returns:**
-- `*Saver` — A pointer to the new Saver instance.
-- `error` — Non-`nil` if the Saver could not be created (e.g., directory issues).
+- `Saver` — A new Saver instance.
+- `error` — Non-nil if the Saver could not be created.
 
 **Example:**
 ```go
@@ -51,8 +52,11 @@ if err != nil {
 }
 ```
 
-### NewLimit(path string, codec EncoderDecoder, maxFiles int) (*Saver, error)
-Like New, but also enforces a maximum number of stored save files. When the limit is exceeded, the oldest file(s) are automatically deleted.
+---
+
+### `NewLimit(path string, codec EncoderDecoder, maxFiles int) (*Saver, error)`
+Like `New`, but also enforces a maximum number of stored save files. When the limit is exceeded, the oldest file(s) are automatically deleted.                                          
+**Note that you are allowed to create multiple savers in 1 directory but this will cause unexpected behavior**.
 
 **Parameters:**
 - `path` — Directory where save files are stored.
@@ -67,86 +71,100 @@ Like New, but also enforces a maximum number of stored save files. When the limi
 ```go
 saver, err := NewLimit("./saves", JSONCodec{}, 10)
 if err != nil {
-    return err
+    log.Fatal(err)
 }
 ```
 
-*** (s *Saver) Save(data any) error
+---
+
+### `(s *Saver) Save(data any) error`
 Saves the given data to a new file in the Saver’s directory using the configured codec.
 
 **Parameters:**
-- `data` — Any Go value (struct, map, slice, etc.) to be saved.
-
-**Behavior:**
-Creates a new filename with a timestamp (YYYYMMDD_HHMMSS) to ensure chronological ordering.
-Encodes data using the Saver’s codec (GobCodec or JSONCodec).
-Writes the encoded data to disk.
-If maxStoredFiles is set, old saves are deleted as needed.
+- `data` — Any Go value to be saved.
 
 **Returns:**
 - `error` — Non-nil if encoding or writing fails.
 
 **Example:**
 ```go
-player := Player{Name: "Alice", Score: 42}
-if err := saver.Save(player); err != nil {
-    return err
+user := User{Name: "Alice", Score: 42}
+if err := saver.Save(user); err != nil {
+    log.Fatal(err)
 }
 ```
 
-###(s *Saver) Load(file string, target any) error
+---
+
+### `(s *Saver) LoadLatest(target any) error`
+Loads the most recent save file into the provided target variable.
+
+**Parameters:**
+- `target` — Pointer to the variable where the decoded data will be stored.
+
+**Returns:**
+- `error` — Non-nil if no valid save files are found or decoding fails.
+
+**Example:**
+```go
+var user User
+if err := saver.LoadLatest(&user); err != nil {
+    log.Fatal(err)
+}
+```
+
+---
+
+### `(s *Saver) Load(file string, target any) error`
 Loads a specific save file into the provided target variable.
 
 **Parameters:**
 - `file` — Filename of the save file to load (not the full path).
-target — Pointer to the variable where the decoded data will be stored.
+- `target` — Pointer to the variable where the decoded data will be stored.
 
-Behavior:
+**Returns:**
+- `error` — Non-nil if the file cannot be read, decoded, or found.
 
-Reads the specified file from the Saver’s directory.
-
-Decodes it using the Saver’s codec.
-
-Stores the result in target.
-
-Returns:
-
-error — Non-nil if the file cannot be read, decoded, or found.
-
-Example:
+**Example:**
 ```go
-var player Player
-if err := saver.Load("save_20250813_123456.dat", &player); err != nil {
-    log.Fatal(err)
-}
-```
-(s *Saver) LoadLatest(target any) error
-Loads the most recent save file into the provided target variable.
-
-Parameters:
-
-target — Pointer to the variable where the decoded data will be stored.
-
-Behavior:
-
-Scans the Saver’s directory for valid save files.
-
-Finds the file with the most recent timestamp in its name.
-
-Decodes its contents into target.
-
-Returns:
-
-error — Non-nil if no valid save files are found or decoding fails.
-
-Example:
-```go
-var latestPlayer Player
-if err := saver.LoadLatest(&latestPlayer); err != nil {
+var user User
+if err := saver.Load("save_20250813_123456.dat", &user); err != nil {
     log.Fatal(err)
 }
 ```
 
+---
+
+### `(s *Saver) DeleteOld() error`
+Deletes the oldest save files in the Saver’s directory based on its timestamp until the number of save files is <= s.maxStoredFiles. If you didn't specify a s.maxStoredFiles using NewLimit it will not delete anything. Run the DeleteFile method if you do want to delete a file.
+
+**Returns:**
+- `error` — Non-nil if no valid save files are found or if deletion fails.
+
+**Example:**
+```go
+if err := saver.DeleteOld(); err != nil {
+    log.Fatal(err)
+}
+```
+
+---
+
+### `(s *Saver) DeleteFile(fileName string) error`
+Deletes a specific save file from the Saver’s directory.
+
+**Parameters:**
+- `fileName` — The name of the file to delete (not the full path).
+
+**Returns:**
+- `error` — Non-nil if the file cannot be found or deletion fails.
+
+**Example:**
+```go
+if err := saver.Delete("examplefile"); err != nil {
+    log.Fatal(err)
+}
+```
 
 ## License
 
