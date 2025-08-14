@@ -4,7 +4,8 @@ import (
 	"encoding/gob"
 	"encoding/json"
 	"errors"
-	"fmt"
+
+	//"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -68,50 +69,70 @@ func NewLimit(path string, codec EncoderDecoder, maxFiles int) (*Saver, error) {
 
 // Save writes data to a new file with a timestamp in its name.
 func (s *Saver) Save(data any) error {
-	files, err := os.ReadDir(s.dir)
-	if err != nil {
-		return err
-	}
-	oldestTime := time.Now()
-	var oldestFile string
-	saveFilesCount := 0
-	if s.maxStoredFiles != 0 {
-		for _, f := range files {
-			if !f.Type().IsRegular() {
-				continue
-			}
-			if len(f.Name()) < 20 { // minimal length check for timestamp pattern
-				continue
-			}
-			timestamp := f.Name()[5:20]
-			t, err := time.Parse("20060102_150405", timestamp)
-			if err != nil {
-				continue // skip files that don't match
-			}
-			saveFilesCount++
-			if saveFilesCount == 1 || t.Before(oldestTime) {
-				oldestTime = t
-				oldestFile = f.Name()
-			}
-		}
-		if saveFilesCount >= s.maxStoredFiles {
-			if oldestFile != "" {
-				fmt.Printf("removing %s", oldestFile)
-				err = os.Remove(filepath.Join(s.dir, oldestFile))
-				if err != nil {
-					return err
-				}
-			}
-		}
-	}
+	s.DeleteOld()
 	filename := "save_" + time.Now().Format("20060102_150405") + s.fileExt()
 	path := filepath.Join(s.dir, filename)
-
 	file, err := os.Create(path)
 	if err != nil {
 		return err
 	}
 	return s.codec.Encode(file, data)
+}
+
+func (s *Saver) DeleleFile(fileName string) error {
+	fullpath := filepath.Join(s.dir, fileName)
+	_, err := os.Stat(fullpath)
+	if err != nil {
+		return err
+	}
+	err = os.Remove(fullpath)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *Saver) DeleteOld() error {
+	if s.maxStoredFiles != 0 {
+		files, err := os.ReadDir(s.dir)
+		if err != nil {
+			return err
+		}
+		oldestTime := time.Now()
+		var oldestFile string
+		saveFilesCount := 0
+		for {
+			for _, f := range files {
+				if !f.Type().IsRegular() {
+					continue
+				}
+				if len(f.Name()) < 20 { // minimal length check for timestamp pattern
+					continue
+				}
+				timestamp := f.Name()[5:20]
+				t, err := time.Parse("20060102_150405", timestamp)
+				if err != nil {
+					continue // skip files that don't match
+				}
+				saveFilesCount++
+				if saveFilesCount == 1 || t.Before(oldestTime) {
+					oldestTime = t
+					oldestFile = f.Name()
+				}
+			}
+			if saveFilesCount >= s.maxStoredFiles {
+				if oldestFile != "" {
+					err = os.Remove(filepath.Join(s.dir, oldestFile))
+					if err != nil {
+						return err
+					}
+				}
+			} else {
+				break
+			}
+		}
+	}
+	return nil
 }
 
 func (s *Saver) Load(file string, target any) error {

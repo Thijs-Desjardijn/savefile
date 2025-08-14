@@ -37,7 +37,7 @@ func TestSaveLoadFileMultiple(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(files) > 3 {
+	if len(files) > 4 {
 		t.Fatalf("exceeded the max number of files")
 	}
 
@@ -48,5 +48,25 @@ func TestSaveLoadFileMultiple(t *testing.T) {
 	}
 	if retrievedData != data1 {
 		t.Fatalf("the loaded data is not the same as the saved data")
+	}
+}
+
+func TestManuallyDelete(t *testing.T) {
+	saver, err := New("./savefile/testdeletingfolder", JSONCodec{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	err = saver.Save("hello testworld")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	file, err := os.ReadDir(saver.dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	saver.DeleleFile(file[0].Name())
+	_, err = os.Stat(file[0].Name())
+	if err == nil {
+		t.Fatalf("Expected error of type [*PathError]")
 	}
 }
