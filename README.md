@@ -60,7 +60,10 @@ Like `New`, but also enforces a maximum number of stored save files. When the li
 
 **Parameters:**
 - `path` — Directory where save files are stored.
-- `codec` — Encoder/decoder to use for file serialization.
+- `codec` — Encoder/decoder to use for file serialization.                                                                                  
+  Common options:
+  - `GobCodec{}` for [gob](https://pkg.go.dev/encoding/gob) binary encoding.
+  - `JSONCodec{}` for [json](https://pkg.go.dev/encoding/json) text encoding.
 - `maxFiles` — Maximum number of save files to keep. Must be greater than zero.
 
 **Returns:**
