@@ -6,7 +6,7 @@ import (
 )
 
 func TestSaveLoadFile(t *testing.T) {
-	saver, err := NewLimit("./savefolder/gob", GobCodec{}, 1)
+	saver, err := NewLimit("./savefoldertesting/gob", GobCodec{}, 1)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -23,7 +23,7 @@ func TestSaveLoadFile(t *testing.T) {
 }
 
 func TestSaveLoadFileMultiple(t *testing.T) {
-	saver, err := NewLimit("./savefolder/", JSONCodec{}, 2)
+	saver, err := NewLimit("./savefoldertesting/", JSONCodec{}, 2)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -52,7 +52,7 @@ func TestSaveLoadFileMultiple(t *testing.T) {
 }
 
 func TestManuallyDelete(t *testing.T) {
-	saver, err := New("./savefile/testdeletingfolder", JSONCodec{})
+	saver, err := New("./savefoldertesting/testdeletingfolder", JSONCodec{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -64,7 +64,27 @@ func TestManuallyDelete(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	saver.DeleleFile(file[0].Name())
+	saver.Delete(file[0].Name())
+	_, err = os.Stat(file[0].Name())
+	if err == nil {
+		t.Fatalf("Expected error of type [*PathError]")
+	}
+}
+
+func TestDeleteOldNew(t *testing.T) {
+	saver, err := New("./savefoldertesting/testdeletingfolder", JSONCodec{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	err = saver.Save("Do you also like Jurrasic Park?")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	file, err := os.ReadDir(saver.dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	saver.DeleteOld()
 	_, err = os.Stat(file[0].Name())
 	if err == nil {
 		t.Fatalf("Expected error of type [*PathError]")

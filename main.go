@@ -4,8 +4,6 @@ import (
 	"encoding/gob"
 	"encoding/json"
 	"errors"
-
-	//"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -56,7 +54,11 @@ func New(path string, codec EncoderDecoder) (*Saver, error) {
 	return &Saver{dir: absPath, codec: codec}, nil
 }
 
+// Creates a saver that has a limit wich is automatically managed after each save using DeleteOld().
 func NewLimit(path string, codec EncoderDecoder, maxFiles int) (*Saver, error) {
+	if maxFiles < 1 {
+		return &Saver{}, errors.New("maxFiles must be atleast 1")
+	}
 	absPath, err := filepath.Abs(path)
 	if err != nil {
 		return nil, err
@@ -69,7 +71,9 @@ func NewLimit(path string, codec EncoderDecoder, maxFiles int) (*Saver, error) {
 
 // Save writes data to a new file with a timestamp in its name.
 func (s *Saver) Save(data any) error {
-	s.DeleteOld()
+	if s.maxStoredFiles != 0 {
+		s.DeleteOld()
+	}
 	filename := "save_" + time.Now().Format("20060102_150405") + s.fileExt()
 	path := filepath.Join(s.dir, filename)
 	file, err := os.Create(path)
@@ -79,7 +83,8 @@ func (s *Saver) Save(data any) error {
 	return s.codec.Encode(file, data)
 }
 
-func (s *Saver) DeleleFile(fileName string) error {
+// This function deletes a given file if it exists.
+func (s *Saver) Delete(fileName string) error {
 	fullpath := filepath.Join(s.dir, fileName)
 	_, err := os.Stat(fullpath)
 	if err != nil {
@@ -92,37 +97,46 @@ func (s *Saver) DeleleFile(fileName string) error {
 	return nil
 }
 
+func getOldestFile(s *Saver) (string, int, error) {
+	files, err := os.ReadDir(s.dir)
+	if err != nil {
+		return "", 0, err
+	}
+	oldestTime := time.Now()
+	var oldestFile string
+	saveFilesCount := 0
+	for _, f := range files {
+		if !f.Type().IsRegular() {
+			continue
+		}
+		if len(f.Name()) < 20 { // minimal length check for timestamp pattern
+			continue
+		}
+		timestamp := f.Name()[5:20]
+		t, err := time.Parse("20060102_150405", timestamp)
+		if err != nil {
+			continue // skip files that don't match
+		}
+		saveFilesCount++
+		if saveFilesCount == 1 || t.Before(oldestTime) {
+			oldestTime = t
+			oldestFile = f.Name()
+		}
+	}
+	return oldestFile, saveFilesCount, nil
+}
+
+// If the saver is created using NewLimit, this function will delete files until that limit is reached or if the saver is created using New it will delete the oldest file. This function will ignore files that don't follow the save file format.
 func (s *Saver) DeleteOld() error {
 	if s.maxStoredFiles != 0 {
-		files, err := os.ReadDir(s.dir)
-		if err != nil {
-			return err
-		}
-		oldestTime := time.Now()
-		var oldestFile string
-		saveFilesCount := 0
 		for {
-			for _, f := range files {
-				if !f.Type().IsRegular() {
-					continue
-				}
-				if len(f.Name()) < 20 { // minimal length check for timestamp pattern
-					continue
-				}
-				timestamp := f.Name()[5:20]
-				t, err := time.Parse("20060102_150405", timestamp)
-				if err != nil {
-					continue // skip files that don't match
-				}
-				saveFilesCount++
-				if saveFilesCount == 1 || t.Before(oldestTime) {
-					oldestTime = t
-					oldestFile = f.Name()
-				}
+			oldestFile, saveFilesCount, err := getOldestFile(s)
+			if err != nil {
+				return err
 			}
 			if saveFilesCount >= s.maxStoredFiles {
 				if oldestFile != "" {
-					err = os.Remove(filepath.Join(s.dir, oldestFile))
+					err := os.Remove(filepath.Join(s.dir, oldestFile))
 					if err != nil {
 						return err
 					}
@@ -131,10 +145,22 @@ func (s *Saver) DeleteOld() error {
 				break
 			}
 		}
+	} else {
+		oldestFile, _, err := getOldestFile(s)
+		if err != nil {
+			return err
+		}
+		if oldestFile != "" {
+			err = os.Remove(oldestFile)
+			if err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }
 
+// Load reads a fiven file and decodes it.
 func (s *Saver) Load(file string, target any) error {
 	f, err := os.Open(filepath.Join(s.dir, file))
 	if err != nil {

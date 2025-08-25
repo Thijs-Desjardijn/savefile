@@ -9,12 +9,12 @@ This tool automatically manages the number of saved files in a given directory, 
 - **Configurable Limits** — Set the maximum number of stored save files.
 - **Safe Filtering** — Ignores non-regular files and files without a valid timestamp.
 
-## Filename Requirements
+## Filename Format
 
 The cleanup logic expects filenames to contain a timestamp in the following format:
 PREFIX_YYYYMMDD_HHMMSS.ext
 
-- The timestamp must start at character index **5** in the filename and be exactly 15 characters long (`YYYYMMDD_HHMMSS`).
+- The timestamp must start at character index **5** in the filename and be exactly 15 characters long (`YYYYMMDD_HHMMSS`) **Note: this is automatically handled** .
 - Files with invalid or missing timestamps are ignored.
 
 ## How It Works
@@ -82,6 +82,7 @@ if err != nil {
 
 ### `(s *Saver) Save(data any) error`
 Saves the given data to a new file in the Saver’s directory using the configured codec.
+After saving the data it will also run DeleteOld() if a maxStoredFiles had been set using NewLimit().
 
 **Parameters:**
 - `data` — Any Go value to be saved.
@@ -139,7 +140,7 @@ if err := saver.Load("save_20250813_123456.dat", &user); err != nil {
 ---
 
 ### `(s *Saver) DeleteOld() error`
-Deletes the oldest save files in the Saver’s directory based on its timestamp until the number of save files is <= s.maxStoredFiles. If you didn't specify a s.maxStoredFiles using NewLimit it will not delete anything. Run the DeleteFile method if you do want to delete a file.
+Deletes the oldest save files in the Saver’s directory based on its timestamp until the number of save files is <= s.maxStoredFiles. If you didn't specify a s.maxStoredFiles using NewLimit it will Delete the oldest file. Run the DeleteFile method if you do want to delete a specific file.
 
 **Returns:**
 - `error` — Non-nil if no valid save files are found or if deletion fails.
