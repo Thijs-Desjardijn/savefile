@@ -59,14 +59,12 @@ func NewLimit(path string, codec EncoderDecoder, maxFiles int) (*Saver, error) {
 	if maxFiles < 1 {
 		return &Saver{}, errors.New("maxFiles must be atleast 1")
 	}
-	absPath, err := filepath.Abs(path)
+	saver, err := New(path, codec)
 	if err != nil {
-		return nil, err
+		return &Saver{}, err
 	}
-	if err := os.MkdirAll(absPath, 0755); err != nil {
-		return nil, err
-	}
-	return &Saver{dir: absPath, maxStoredFiles: maxFiles, codec: codec}, nil
+	saver.maxStoredFiles = maxFiles
+	return saver, nil
 }
 
 // Save writes data to a new file with a timestamp in its name.
